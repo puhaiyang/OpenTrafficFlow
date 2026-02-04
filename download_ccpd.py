@@ -84,7 +84,7 @@ DATASETS = {
         'folder': 'CCPD_BlueGreenYellow',
         'size': '1.5G',
         'min_size': 1.4 * 1024 * 1024 * 1024,  # 1.4GB
-        'archive_name': 'ccpdblueyellowgreen.zip',
+        'archive_name': 'ccpd_blue_yellow_green.zip',
         'archive_type': 'zip',
         'expected_archive_size': 1.5 * 1024 * 1024 * 1024,  # 1.5GB
         'description': '蓝绿黄车牌数据集'
