@@ -1,17 +1,16 @@
 """
 CCPD 全数据集转换为 YOLO 格式脚本
-支持 CCPD-2019, CCPD-2020, CCPD-BlueGreenYellow 三种数据集
+支持 CCPD-2019, CCPD-2020 两种数据集
 
 功能：
 1. 自动检测数据集类型
-2. 支持三种 CCPD 文件名格式
+2. 支持两种 CCPD 文件名格式
 3. 转换为 YOLO 格式（归一化坐标）
 4. 创建 YOLOv5/YOLOv8 所需的目录结构
 5. 自动复制图片和生成标签文件
 
 CCPD 文件名格式：
 - CCPD-2019/2020: 025-95_113-154&383_386&473-0&0_0&0_0&0-0-0.jpg
-- CCPD-BlueGreenYellow: 0-0_0-0&342_719&610-714&610_0&585_15&342_719&367-29_16_2_2_30_31_28-0-0.jpg.png
 """
 
 import os
@@ -77,145 +76,21 @@ def extract_bbox_ccpd_standard(filename: str) -> Optional[Tuple[int, int, int, i
         return None
 
 
-def extract_bbox_ccpd_blueyellow(filename: str) -> Optional[Tuple[int, int, int, int]]:
-    """
-    从 CCPD-BlueGreenYellow 文件名中提取车牌边界框坐标
-
-    文件名格式示例：
-    0-0_0-0&342_719&610-714&610_0&585_15&342_719&367-29_16_2_2_30_31_28-0-0.jpg.png
-
-    格式解析：
-    - 第一部分：车牌号 (0)
-    - 第二部分：左上角坐标 (0_0)
-    - 第三部分：右下角坐标 (0&342_719&610) - 这里可能包含更多信息
-    - 第四部分：另一个坐标点 (714&610)
-    - 后续部分：四个顶点、其他信息
-
-    实际上，这个格式更复杂。我们尝试从四个顶点坐标计算边界框。
-
-    标准格式各部分含义：
-    1. 车牌号
-    2. 边界框左上角 (x0_y0)
-    3. 边界框右下角 (x1&y1_x2&y2) - 四个角点的前两个
-    4-7. 四个角点坐标
-    8. 其他属性
-
-    对于 BlueGreenYellow 格式，我们需要尝试多种模式。
-    """
-    try:
-        # 移除文件扩展名（可能是 .jpg.png 或 .png）
-        basename = filename
-        if basename.endswith('.jpg.png'):
-            basename = basename[:-8]
-        elif basename.endswith('.png'):
-            basename = basename[:-4]
-        elif basename.endswith('.jpg'):
-            basename = basename[:-4]
-
-        # 模式1: 尝试使用标准格式（有些文件可能遵循标准）
-        pattern1 = r'-(\d+)_(\d+)-(\d+)&(\d+)_'
-        match = re.search(pattern1, basename)
-        if match:
-            x0 = int(match.group(1))
-            y0 = int(match.group(2))
-            x1 = int(match.group(3))
-            y1 = int(match.group(4))
-            # 验证坐标有效性
-            if x0 >= 0 and y0 >= 0 and x1 > x0 and y1 > y0:
-                return (x0, y0, x1, y1)
-
-        # 模式2: BlueGreenYellow 特殊格式
-        # 格式: 0-0_0-0&342_719&610-714&610_0&585_15&342_719&367-29_16_2_2_30_31_28-0-0
-        # 我们需要提取四个顶点坐标来计算边界框
-
-        # 尝试提取所有数字对
-        # 按照标准 CCPD 格式，第4-7个字段应该是四个顶点坐标
-        parts = basename.split('-')
-
-        if len(parts) >= 8:
-            # 第4-7部分应该是四个顶点 (格式: x0&y0_x1&y1_x2&y2_x3&y3)
-            # 但实际上BlueGreenYellow格式可能不同
-
-            # 尝试从第2和第3部分提取边界框
-            # 第2部分: 0_0 (左上角)
-            # 第3部分: 0&342_719&610 (这里格式不一样)
-
-            # 让我们尝试从文件名中找到四个角点
-            # 标准格式中：4个角点在第4-7部分
-
-            if len(parts) >= 7:
-                try:
-                    # 尝试提取所有坐标点
-                    all_coords = []
-                    for part in parts[2:7]:  # 检查第3-7部分
-                        if '&' in part:
-                            # 可能包含坐标
-                            subparts = part.split('_')
-                            for sub in subparts:
-                                if '&' in sub:
-                                    coords = sub.split('&')
-                                    if len(coords) >= 2:
-                                        try:
-                                            x, y = int(coords[0]), int(coords[1])
-                                            if x >= 0 and y >= 0:
-                                                all_coords.append((x, y))
-                                        except:
-                                            pass
-
-                    # 如果找到了有效的坐标点，计算边界框
-                    if len(all_coords) >= 2:
-                        xs = [c[0] for c in all_coords]
-                        ys = [c[1] for c in all_coords]
-                        x0, x1 = min(xs), max(xs)
-                        y0, y1 = min(ys), max(ys)
-
-                        # 验证边界框
-                        if x1 > x0 and y1 > y0:
-                            return (x0, y0, x1, y1)
-                except:
-                    pass
-
-        # 模式3: 使用更宽松的正则表达式
-        # 尝试匹配任意两组坐标
-        pattern3 = r'-?(\d+)_(\d+)-?(\d+)&(\d+)_?'
-        match = re.search(pattern3, basename)
-        if match:
-            x0 = int(match.group(1))
-            y0 = int(match.group(2))
-            x1 = int(match.group(3))
-            y1 = int(match.group(4))
-            if x0 >= 0 and y0 >= 0 and x1 > x0 and y1 > y0:
-                return (x0, y0, x1, y1)
-
-        return None
-
-    except Exception as e:
-        print(f"解析BlueGreenYellow格式失败: {filename}, 错误: {e}")
-        return None
-
-
 def extract_bbox_from_filename(filename: str, dataset_type: str = 'auto') -> Optional[Tuple[int, int, int, int]]:
     """
     从 CCPD 文件名中提取车牌边界框坐标
-    自动检测数据集类型
 
     参数:
         filename: 文件名
-        dataset_type: 数据集类型 ('ccpd2019', 'ccpd2020', 'bluegreenyellow', 'auto')
+        dataset_type: 数据集类型 ('ccpd2019', 'ccpd2020', 'auto')
 
     返回: (x0, y0, x1, y1) 或 None
     """
     if dataset_type == 'auto':
-        # 自动检测：检查是否是 .jpg.png 结尾
-        if filename.endswith('.jpg.png') or '.jpg.png' in filename:
-            dataset_type = 'bluegreenyellow'
-        else:
-            dataset_type = 'ccpd2019'  # 默认使用标准格式
+        # 自动检测：默认使用标准格式
+        dataset_type = 'ccpd2019'
 
-    if dataset_type == 'bluegreenyellow':
-        return extract_bbox_ccpd_blueyellow(filename)
-    else:
-        return extract_bbox_ccpd_standard(filename)
+    return extract_bbox_ccpd_standard(filename)
 
 
 def convert_to_yolo_format(bbox: Tuple[int, int, int, int], img_width: int, img_height: int) -> Tuple[int, float, float, float, float]:
@@ -274,7 +149,7 @@ def detect_dataset_structure(source_path: str) -> dict:
     自动检测数据集结构
 
     返回: {
-        'type': 'ccpd2019' | 'ccpd2020' | 'bluegreenyellow',
+        'type': 'ccpd2019' | 'ccpd2020',
         'has_splits': bool,
         'splits': dict  # train/val/test 的路径
     }
@@ -297,21 +172,15 @@ def detect_dataset_structure(source_path: str) -> dict:
     # 检测数据集类型
     # 1. 通过路径名称检测
     path_lower = source_path.lower()
-    if 'blue' in path_lower or 'green' in path_lower or 'yellow' in path_lower:
-        result['type'] = 'bluegreenyellow'
-    elif '2020' in path_lower:
+    if '2020' in path_lower:
         result['type'] = 'ccpd2020'
     elif '2019' in path_lower or 'ccpd' in path_lower:
         result['type'] = 'ccpd2019'
 
     # 2. 通过样本文件名检测
     sample_files = list_all_files(source_path)
-    if len(sample_files) > 0:
-        sample_filename = os.path.basename(sample_files[0])
-        if sample_filename.endswith('.jpg.png') or '.jpg.png' in sample_filename:
-            result['type'] = 'bluegreenyellow'
-        elif 'ccpd' in path_lower and '2020' not in path_lower:
-            result['type'] = 'ccpd2019'
+    if len(sample_files) > 0 and 'ccpd' in path_lower and '2020' not in path_lower:
+        result['type'] = 'ccpd2019'
 
     return result
 
@@ -331,7 +200,7 @@ def convert_dataset(
     参数:
         source_path: CCPD 数据集源路径
         target_path: YOLO 数据集目标路径
-        dataset_type: 数据集类型 ('auto', 'ccpd2019', 'ccpd2020', 'bluegreenyellow')
+        dataset_type: 数据集类型 ('auto', 'ccpd2019', 'ccpd2020')
         val_ratio: 验证集比例（仅在 preserve_splits=False 时使用）
         test_ratio: 测试集比例（仅在 preserve_splits=False 时使用）
         copy_images: 是否复制图片（False 则移动图片）
@@ -597,7 +466,7 @@ def main():
         '--dataset-type',
         type=str,
         default='auto',
-        choices=['auto', 'ccpd2019', 'ccpd2020', 'bluegreenyellow'],
+        choices=['auto', 'ccpd2019', 'ccpd2020'],
         help='数据集类型（默认: auto 自动检测）'
     )
     parser.add_argument(
@@ -631,7 +500,7 @@ def main():
     parser.add_argument(
         '--all',
         action='store_true',
-        help='转换所有 CCPD 数据集（CCPD2019, CCPD2020, CCPD-BlueGreenYellow）'
+        help='转换所有 CCPD 数据集（CCPD2019, CCPD2020）'
     )
 
     args = parser.parse_args()
@@ -650,7 +519,6 @@ def main():
         possible_datasets = [
             ('CCPD', 'CCPD/puhaiyang___CCPD2019/CCPD2019', 'ccpd2019'),
             ('CCPD2020', 'CCPD2020/puhaiyang___CCPD2020/CCPD2020', 'ccpd2020'),
-            ('CCPD-BlueGreenYellow', 'CCPD_BlueGreenYellow/puhaiyang___ccpdblueyellowgreen/ccpd_blue_yellow_green', 'bluegreenyellow'),
         ]
 
         for name, relative_path, dtype in possible_datasets:

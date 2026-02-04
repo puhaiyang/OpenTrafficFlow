@@ -41,23 +41,6 @@ drwxr-xr-x 2 root root 167936  2月  4 15:55 val
 -rw-r--r-- 1 root root 133527  2月  4 15:55 '00373372395833-90_96-276&514_387&548-387&548_276&547_276&516_384&514-0_0_3_26_25_31_33_32-157-19.jpg'
 
 
-### CCPD_BlueGreenYellow数据集
-
-(ultralytics-env) [root@xg-ragflow-node1 OpenTrafficFlow]# ll CCPD_Datasets/CCPD_BlueGreenYellow/puhaiyang___ccpdblueyellowgreen/ccpd_blue_yellow_green | head -n 10
-总用量 2122368
--rw-r--r-- 1 root root  412719  2月  4 17:06 0-0_0-0&342_719&610-714&610_0&585_15&342_719&367-29_16_2_2_30_31_28-0-0.jpg.png
--rw-r--r-- 1 root root 1233169  2月  4 17:06 0-0_0-0&355_641&631-641&631_54&501_0&355_565&485-11_14_2_2_31_27_25-0-0.jpg.png
--rw-r--r-- 1 root root 1300288  2月  4 17:06 0-0_0-0&355_641&631-641&631_54&501_0&355_565&485-11_2_32_14_13_24_26-0-0.jpg.png
--rw-r--r-- 1 root root  848302  2月  4 17:06 0-0_0-0&368_647&599-636&574_0&599_0&393_647&368-23_0_7_33_26_30_19-0-0.jpg.png
--rw-r--r-- 1 root root  781570  2月  4 17:06 0-0_0-0&368_719&666-719&666_0&537_0&368_719&497-19_12_14_18_32_31_25-0-0.jpg.png
--rw-r--r-- 1 root root  657086  2月  4 17:06 0-0_0-0&368_719&666-719&666_0&537_0&368_719&497-3_18_26_26_8_21_26-0-0.jpg.png
--rw-r--r-- 1 root root  437494  2月  4 17:06 0-0_0-0&370_676&614-667&614_0&592_0&370_676&392-19_20_32_6_24_26_31-0-0.jpg.png
--rw-r--r-- 1 root root  506120  2月  4 17:06 0-0_0-0&370_719&644-719&597_0&644_0&417_719&370-15_16_28_26_25_12_17-0-0.jpg.png
--rw-r--r-- 1 root root  671386  2月  4 17:06 0-0_0-0&370_719&644-719&597_0&644_0&417_719&370-23_6_33_26_27_5_5-0-0.jpg.png
-(ultralytics-env) [root@xg-ragflow-node1 OpenTrafficFlow]# 
-
-
-
 # 安装
 pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 pip install opencv-python

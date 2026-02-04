@@ -77,17 +77,6 @@ DATASETS = {
         'archive_type': 'tar.xz',
         'expected_archive_size': 12.6 * 1024 * 1024 * 1024,  # 12.6GB
         'description': '较大，下载耗时较长'
-    },
-    '3': {
-        'name': 'CCPD-BlueGreenYellow',
-        'repo': 'puhaiyang/ccpdblueyellowgreen',
-        'folder': 'CCPD_BlueGreenYellow',
-        'size': '1.5G',
-        'min_size': 1.4 * 1024 * 1024 * 1024,  # 1.4GB
-        'archive_name': 'ccpd_blue_yellow_green.zip',
-        'archive_type': 'zip',
-        'expected_archive_size': 1.5 * 1024 * 1024 * 1024,  # 1.5GB
-        'description': '蓝绿黄车牌数据集'
     }
 }
 
@@ -539,7 +528,7 @@ def main():
     """主函数"""
     print("\n" + "=" * 60)
     print("OpenXLab CCPD 数据集下载工具 v2.3")
-    print("支持: CCPD2019 | CCPD2020 | CCPD-BlueGreenYellow")
+    print("支持: CCPD2019 | CCPD2020")
     print("=" * 60)
     print("特性: 断点续传 | 分步下载 | 自动解压")
     print("=" * 60 + "\n")

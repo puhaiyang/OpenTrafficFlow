@@ -2,10 +2,9 @@
 
 ## 概述
 
-`convert_all_ccpd_to_yolo.py` 支持将三种 CCPD 数据集转换为 YOLO 格式：
+`convert_all_ccpd_to_yolo.py` 支持将两种 CCPD 数据集转换为 YOLO 格式：
 - **CCPD-2019**: 标准格式，包含多个子目录（ccpd_base, ccpd_blur, 等）
 - **CCPD-2020**: 标准格式，包含 train/val/test 划分
-- **CCPD-BlueGreenYellow**: 特殊格式，文件名带 `.jpg.png` 扩展名
 
 ## 数据集格式说明
 
@@ -17,14 +16,6 @@
 - `95_113`: 边界框左上角坐标 (x0, y0)
 - `154&383`: 边界框右下角坐标 (x1, y1)
 - 后续部分包含四个顶点坐标、车牌类型等信息
-
-### CCPD-BlueGreenYellow
-
-文件名格式：`0-0_0-0&342_719&610-714&610_0&585_15&342_719&367-29_16_2_2_30_31_28-0-0.jpg.png`
-
-- 该数据集使用更复杂的坐标编码
-- 脚本会自动检测并提取边界框信息
-- 支持双重扩展名 `.jpg.png`
 
 ## 使用方法
 
@@ -44,13 +35,6 @@ python convert_all_ccpd_to_yolo.py \
     --target ./YOLO_Data/CCPD2020 \
     --dataset-type ccpd2020 \
     --preserve-splits \
-    --copy
-
-# 转换 CCPD-BlueGreenYellow
-python convert_all_ccpd_to_yolo.py \
-    --source ./CCPD_Datasets/CCPD_BlueGreenYellow/puhaiyang___ccpdblueyellowgreen/ccpd_blue_yellow_green \
-    --target ./YOLO_Data/BlueGreenYellow \
-    --dataset-type bluegreenyellow \
     --copy
 ```
 
@@ -96,8 +80,6 @@ YOLO_Data/
 │       └── test/            # 测试集标签
 ├── CCPD2020/                # CCPD-2020 数据集
 │   └── ...
-└── CCPD-BlueGreenYellow/    # CCPD-BlueGreenYellow 数据集
-    └── ...
 ```
 
 ## 标签格式
@@ -143,16 +125,7 @@ yolo detect train \
 
 **A**: 检查以下几点：
 1. 确认 `--dataset-type` 参数正确
-2. 对于 CCPD-BlueGreenYellow，确认文件名格式符合规范
-3. 查看具体文件名是否与示例格式一致
-
-### Q: CCPD-BlueGreenYellow 解析失败
-
-**A**: 该数据集格式较为特殊，脚本支持以下格式：
-- 标准格式（部分文件）
-- 扩展格式（需要从多个坐标点计算边界框）
-
-如果仍有问题，可以查看脚本中的 `extract_bbox_ccpd_blueyellow` 函数进行调试。
+2. 查看具体文件名是否与示例格式一致
 
 ### Q: 内存不足
 
@@ -204,10 +177,6 @@ CCPD_Datasets/
 │               ├── train/
 │               ├── val/
 │               └── test/
-└── CCPD_BlueGreenYellow/
-    └── puhaiyang___ccpdblueyellowgreen/
-        └── ccpd_blue_yellow_green/
-            └── *.jpg.png
 ```
 
 如果您的目录结构不同，请使用 `--source` 参数指定正确的路径。
