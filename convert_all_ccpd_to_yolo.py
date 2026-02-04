@@ -106,17 +106,11 @@ def convert_to_yolo_format(bbox: Tuple[int, int, int, int], img_width: int, img_
     """
     x0, y0, x1, y1 = bbox
 
-    # 计算中心点坐标和宽高
-    x_center = (x0 + x1) / 2.0 / img_width
-    y_center = (y0 + y1) / 2.0 / img_height
-    width = (x1 - x0) / img_width
-    height = (y1 - y0) / img_height
-
-    # 限制坐标在 [0, 1] 范围内
-    x_center = max(0, min(1, x_center))
-    y_center = max(0, min(1, y_center))
-    width = max(0, min(1, width))
-    height = max(0, min(1, height))
+    # 计算中心点坐标和宽高（与 ConvertYOLOFormat.py 完全一致）
+    x_center = round((x0 + x1) / 2 / img_width, 6)
+    y_center = round((y0 + y1) / 2 / img_height, 6)
+    width = round((x1 - x0) / img_width, 6)
+    height = round((y1 - y0) / img_height, 6)
 
     # CCPD 数据集只有一个类别：车牌
     class_id = 0
@@ -403,8 +397,8 @@ def process_files(
             label_target_path = os.path.join(target_path, 'labels', split_name, label_filename)
 
             with open(label_target_path, 'w') as f:
-                # YOLO 格式: class_id x_center y_center width height
-                f.write(f"{yolo_bbox[0]} {yolo_bbox[1]:.6f} {yolo_bbox[2]:.6f} {yolo_bbox[3]:.6f} {yolo_bbox[4]:.6f}\n")
+                # YOLO 格式: class_id x_center y_center width height（与 ConvertYOLOFormat.py 格式一致）
+                f.write(" ".join([str(yolo_bbox[0]), str(yolo_bbox[1]), str(yolo_bbox[2]), str(yolo_bbox[3]), str(yolo_bbox[4])]) + "\n")
 
             success += 1
 
