@@ -515,11 +515,11 @@ def select_datasets():
 
     for key, config in DATASETS.items():
         print(f"{key}. {config['name']} - {config['size']} - {config['description']}")
-    print("4. 下载全部数据集")
+    print("3. 下载全部数据集")
     print("0. 跳过下载")
     print("=" * 60)
 
-    choice = input("\n请输入选项 (0/1/2/3/4): ").strip()
+    choice = input("\n请输入选项 (0/1/2/3): ").strip()
 
     return choice
 
@@ -549,9 +549,7 @@ def main():
     elif choice == '2':
         datasets_to_download.append('2')
     elif choice == '3':
-        datasets_to_download.append('3')
-    elif choice == '4':
-        datasets_to_download = ['1', '2', '3']
+        datasets_to_download = ['1', '2']
     elif choice == '0':
         print("跳过下载")
         return
