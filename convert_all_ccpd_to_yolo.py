@@ -21,7 +21,7 @@ import argparse
 import random
 from pathlib import Path
 from tqdm import tqdm
-import cv2
+from PIL import Image
 from typing import Tuple, Optional, List
 
 
@@ -491,12 +491,12 @@ def process_files(
     for idx, img_path in enumerate(tqdm(files, desc=f"处理 {split_name}")):
         try:
             # 读取图片获取尺寸
-            img = cv2.imread(img_path)
-            if img is None:
+            try:
+                with Image.open(img_path) as img:
+                    width, height = img.size
+            except Exception as e:
                 failed += 1
                 continue
-
-            height, width = img.shape[:2]
 
             # 从文件名提取边界框
             filename = os.path.basename(img_path)
