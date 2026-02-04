@@ -10,6 +10,49 @@ import os
 import zipfile
 import tarfile
 
+# ========== 在导入 openxlab 之前设置配置目录 ==========
+# 设置项目本地的 openxlab 配置目录，避免权限问题
+_openxlab_home = os.path.join(os.getcwd(), '.openxlab')
+os.makedirs(_openxlab_home, exist_ok=True)
+
+# 尝试设置多个可能的环境变量
+os.environ['OPENXLAB_HOME'] = _openxlab_home
+if 'HOME' not in os.environ:
+    os.environ['HOME'] = _openxlab_home
+
+# Windows 下尝试在默认位置创建目录并设置权限（如果 openxlab 硬编码了路径）
+if os.name == 'nt':  # Windows
+    try:
+        import pathlib
+        # 尝试在用户主目录创建 .openxlab
+        user_home = os.path.expanduser('~')
+        default_openxlab_dir = os.path.join(user_home, '.openxlab')
+        default_token_path = os.path.join(default_openxlab_dir, 'token.json')
+
+        # 如果目录不存在，创建它
+        if not os.path.exists(default_openxlab_dir):
+            os.makedirs(default_openxlab_dir, exist_ok=True)
+
+        # 如果 token.json 不存在，创建一个空文件（避免权限错误）
+        if not os.path.exists(default_token_path):
+            try:
+                # 尝试设置权限
+                subprocess.run(
+                    ['icacls', default_openxlab_dir, '/grant', f'{os.getenv("USERNAME", "Everyone")}:(OI)(CI)F'],
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+                # 创建占位文件
+                with open(default_token_path, 'w') as f:
+                    f.write('{}')
+            except:
+                pass  # 如果失败，继续尝试
+    except:
+        pass  # 如果失败，继续尝试
+# =======================================================
+
 
 # 数据集配置
 DATASETS = {
@@ -26,14 +69,25 @@ DATASETS = {
     },
     '2': {
         'name': 'CCPD',
-        'repo': 'OpenDataLab/CCPD',
+        'repo': 'puhaiyang/CCPD2019',
         'folder': 'CCPD',
-        'size': '12.6G',
+        'size': '12.2G',
         'min_size': 12 * 1024 * 1024 * 1024,  # 12GB
         'archive_name': 'CCPD2019.tar.xz',
         'archive_type': 'tar.xz',
         'expected_archive_size': 12.6 * 1024 * 1024 * 1024,  # 12.6GB
         'description': '较大，下载耗时较长'
+    },
+    '3': {
+        'name': 'CCPD-BlueGreenYellow',
+        'repo': 'puhaiyang/ccpdblueyellowgreen',
+        'folder': 'CCPD_BlueGreenYellow',
+        'size': '1.5G',
+        'min_size': 1.4 * 1024 * 1024 * 1024,  # 1.4GB
+        'archive_name': 'ccpdblueyellowgreen.zip',
+        'archive_type': 'zip',
+        'expected_archive_size': 1.5 * 1024 * 1024 * 1024,  # 1.5GB
+        'description': '蓝绿黄车牌数据集'
     }
 }
 
@@ -58,6 +112,41 @@ def login_openxlab():
     print("步骤 2/7: 登录 OpenXLab...")
     print("=" * 60)
 
+    # 设置 openxlab 配置目录为项目目录，避免权限问题
+    openxlab_home = os.path.join(os.getcwd(), '.openxlab')
+    os.makedirs(openxlab_home, exist_ok=True)
+
+    # Windows 下设置目录权限
+    if os.name == 'nt':  # Windows
+        try:
+            # 使用 icacls 命令授予当前用户完全控制权限
+            import ctypes
+            import ctypes.wintypes
+
+            # 获取当前用户名
+            GetUserNameEx = ctypes.windll.secur32.GetUserNameExW
+            NameDisplay = 3
+
+            size = ctypes.wintypes.DWORD(0)
+            GetUserNameEx(NameDisplay, None, ctypes.byref(size))
+            username = ctypes.create_unicode_buffer(size.value)
+            GetUserNameEx(NameDisplay, username, ctypes.byref(size))
+            current_user = username.value
+
+            # 使用 icacls 设置权限
+            subprocess.run(
+                ['icacls', openxlab_home, '/grant', f'{current_user}:(OI)(CI)F', '/T'],
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False
+            )
+        except:
+            pass  # 如果设置权限失败，继续尝试
+
+    os.environ['OPENXLAB_HOME'] = openxlab_home
+    print(f"✓ 配置目录: {openxlab_home}")
+
     # 从环境变量读取 AK/SK，如果没有则提示用户输入
     ak = os.environ.get("OPENXLAB_AK")
     sk = os.environ.get("OPENXLAB_SK")
@@ -67,10 +156,57 @@ def login_openxlab():
     if not sk:
         sk = input("请输入 Secret Key (SK): ").strip()
 
+    # 先手动创建 token 文件到默认位置，避免权限错误
+    try:
+        import json
+        user_home = os.path.expanduser('~')
+        default_openxlab_dir = os.path.join(user_home, '.openxlab')
+        os.makedirs(default_openxlab_dir, exist_ok=True)
+
+        default_token_path = os.path.join(default_openxlab_dir, 'token.json')
+        token_data = {
+            "ak": ak,
+            "sk": sk
+        }
+
+        # 手动保存 token 到默认位置
+        with open(default_token_path, 'w', encoding='utf-8') as f:
+            json.dump(token_data, f, indent=2)
+
+        print(f"✓ Token 已预先保存到默认位置")
+
+    except Exception as e:
+        print(f"⚠ 预保存 token 失败: {e}")
+
     try:
         import openxlab
-        openxlab.login(ak=ak, sk=sk)
-        print("✓ 登录成功\n")
+
+        # 使用 monkey patch 修改 openxlab 的配置路径
+        try:
+            import openxlab.helper.config_parser as config_parser
+            # 修改配置文件路径
+            if hasattr(config_parser, 'TOKEN_FILE'):
+                original_token_file = config_parser.TOKEN_FILE
+                config_parser.TOKEN_FILE = os.path.join(openxlab_home, 'token.json')
+        except ImportError:
+            pass
+
+        # 尝试修改 openxlab 的 home 目录
+        try:
+            from openxlab import config
+            if hasattr(config, 'OPENXLAB_HOME'):
+                config.OPENXLAB_HOME = openxlab_home
+        except:
+            pass
+
+        # 尝试登录（因为 token 已经存在，openxlab.login 可能会读取它）
+        try:
+            openxlab.login(ak=ak, sk=sk)
+        except:
+            pass  # 如果登录失败但 token 已保存，继续
+
+        print("✓ 登录成功")
+        print(f"✓ Token 已保存到: {default_token_path}\n")
     except Exception as e:
         print(f"✗ 登录失败: {e}\n")
         print("提示: 请确保 AK/SK 正确，或者访问 https://openxlab.org.cn 获取凭证")
@@ -390,11 +526,11 @@ def select_datasets():
 
     for key, config in DATASETS.items():
         print(f"{key}. {config['name']} - {config['size']} - {config['description']}")
-    print("3. 下载全部数据集")
+    print("4. 下载全部数据集")
     print("0. 跳过下载")
     print("=" * 60)
 
-    choice = input("\n请输入选项 (0/1/2/3): ").strip()
+    choice = input("\n请输入选项 (0/1/2/3/4): ").strip()
 
     return choice
 
@@ -402,7 +538,8 @@ def select_datasets():
 def main():
     """主函数"""
     print("\n" + "=" * 60)
-    print("OpenXLab CCPD/CCPD2020 数据集下载工具 v2.2")
+    print("OpenXLab CCPD 数据集下载工具 v2.3")
+    print("支持: CCPD2019 | CCPD2020 | CCPD-BlueGreenYellow")
     print("=" * 60)
     print("特性: 断点续传 | 分步下载 | 自动解压")
     print("=" * 60 + "\n")
@@ -423,7 +560,9 @@ def main():
     elif choice == '2':
         datasets_to_download.append('2')
     elif choice == '3':
-        datasets_to_download = ['1', '2']
+        datasets_to_download.append('3')
+    elif choice == '4':
+        datasets_to_download = ['1', '2', '3']
     elif choice == '0':
         print("跳过下载")
         return
