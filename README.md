@@ -55,3 +55,13 @@ drwxr-xr-x 2 root root 167936  2月  4 15:55 val
 -rw-r--r-- 1 root root  506120  2月  4 17:06 0-0_0-0&370_719&644-719&597_0&644_0&417_719&370-15_16_28_26_25_12_17-0-0.jpg.png
 -rw-r--r-- 1 root root  671386  2月  4 17:06 0-0_0-0&370_719&644-719&597_0&644_0&417_719&370-23_6_33_26_27_5_5-0-0.jpg.png
 (ultralytics-env) [root@xg-ragflow-node1 OpenTrafficFlow]# 
+
+
+
+# 安装
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+pip install opencv-python
+pip install pillow
+
+# 转化
+> python convert_all_ccpd_to_yolo.py --all --source ./CCPD_Datasets --target ./YOLO_Data --copy
