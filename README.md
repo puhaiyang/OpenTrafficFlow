@@ -48,3 +48,7 @@ pip install pillow
 
 # 转化
 > python convert_all_ccpd_to_yolo.py --all --source ./CCPD_Datasets --target ./YOLO_Data --copy
+
+
+# 车牌提取
+https://github.com/sirius-ai/LPRNet_Pytorch
