@@ -48,18 +48,32 @@ def extract_bbox_from_filename(filename):
     返回: (x0, y0, x1, y1) 或 None（如果解析失败）
     """
     try:
-        # 提取包含坐标的部分：95_113-154&383
-        pattern = r'-(\d+)_(\d+)-(\d+)&(\d+)_'
-        match = re.search(pattern, filename)
+        # 提取边界框坐标：95_113-154&383_386&473
+        # 方法1：提取第二部分（左上角）和第三部分（右侧两个点）
+        # 使用正则提取坐标部分
 
-        if match:
-            x0 = int(match.group(1))
-            y0 = int(match.group(2))
-            x1 = int(match.group(3))
-            y1 = int(match.group(4))
-            return (x0, y0, x1, y1)
-        else:
+        # 提取左上角坐标 (95_113)
+        tl_pattern = r'-(\d+)_(\d+)-'
+        tl_match = re.search(tl_pattern, filename)
+        if not tl_match:
             return None
+        x0 = int(tl_match.group(1))
+        y0 = int(tl_match.group(2))
+
+        # 提取右侧两个点 (154&383_386&473)，取第二个点作为右下角
+        str1 = re.findall(r'-\d+&\d+_\d+&\d+-', filename)
+        if not str1:
+            return None
+
+        # 去掉首尾的 '-'，然后按 '&' 或 '_' 分割
+        str2 = re.split(r'&|_', str1[0][1:-1])
+
+        # str2 = ['154', '383', '386', '473']
+        # 取第二个点 (386, 473) 作为右下角
+        x1 = int(str2[2])
+        y1 = int(str2[3])
+
+        return (x0, y0, x1, y1)
     except Exception as e:
         print(f"解析文件名失败: {filename}, 错误: {e}")
         return None
