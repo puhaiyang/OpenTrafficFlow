@@ -27,7 +27,7 @@ lpr_model.eval()
 print("Models loaded successfully!")
 
 
-def cv2ImgAddText(img, text, pos, textColor=(0, 255, 0), textSize=20):
+def cv2ImgAddText(img, text, pos, textColor=(255, 0, 0), textSize=50):
     """在图像上添加中文文本"""
     if isinstance(img, np.ndarray):
         img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
@@ -119,9 +119,9 @@ def process_frame(frame, conf_threshold=0.5):
                 plate_no = decode_res(arg_max_preds[0], CHARS)
 
             # 绘制结果
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            frame = cv2ImgAddText(frame, plate_no, (x1, y1 - 25),
-                                  textColor=(0, 255, 0), textSize=20)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            frame = cv2ImgAddText(frame, plate_no, (x1, y1 - 30),
+                                  textColor=(255, 0, 0), textSize=50)
 
             detections.append((plate_no, conf, (x1, y1, x2, y2)))
 

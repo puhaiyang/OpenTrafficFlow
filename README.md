@@ -3,6 +3,8 @@ Make traffic faster and safer.
 
 
 
+![traffic.gif](preview/traffic.gif)
+
 ## 数据集合格式
 ### CCPD-2019数据集
 
