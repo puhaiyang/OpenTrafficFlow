@@ -1,0 +1,32 @@
+# OpenTrafficFlow - 车牌检测与识别系统
+# 安装方式: pip install -r requirements.txt
+
+# 深度学习框架
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 计算机视觉
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+
+# 科学计算
+numpy>=1.24.0
+
+# 目标检测 (YOLO)
+ultralytics>=8.0.0
+
+# 图像处理
+Pillow>=10.0.0
+
+# 进度条显示
+tqdm>=4.65.0
+
+# 视频处理
+moviepy>=1.0.3
+
+# DJI视频GPS提取
+pyosmogps>=0.1.0
+
+# 可选：CUDA支持 (如果有NVIDIA GPU)
+# 请根据你的CUDA版本安装对应的PyTorch版本
+# 访问 https://pytorch.org/get-started/locally/ 获取正确的安装命令

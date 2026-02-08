@@ -241,9 +241,9 @@ tmp/
 *.pt
 *.pth
 *.onnx
-*.weights
+#*.weights
 runs/
-weights/
+#weights/
 checkpoints/
 
 # 训练输出

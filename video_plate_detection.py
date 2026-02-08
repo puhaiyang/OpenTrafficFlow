@@ -53,7 +53,7 @@ def cv2ImgAddText(img, text, pos, textColor=(255, 0, 0), textSize=50):
     if font is None:
         font = ImageFont.load_default()
 
-    draw.text(pos, text, textColor, font=font)
+    draw.text(pos, text+" 侵走非机动车道", textColor, font=font)
     return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
 
 
@@ -118,12 +118,14 @@ def process_frame(frame, conf_threshold=0.5):
                 arg_max_preds = np.argmax(preds, axis=1)
                 plate_no = decode_res(arg_max_preds[0], CHARS)
 
-            # 绘制结果
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            frame = cv2ImgAddText(frame, plate_no, (x1, y1 - 30),
-                                  textColor=(255, 0, 0), textSize=50)
+            # 验证车牌长度（普通车牌7位，新能源车牌8位）
+            if len(plate_no) in [7, 8]:
+                # 绘制结果
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                frame = cv2ImgAddText(frame, plate_no, (x1-100, y1 - 100),
+                                      textColor=(255, 0, 0), textSize=60)
 
-            detections.append((plate_no, conf, (x1, y1, x2, y2)))
+                detections.append((plate_no, conf, (x1, y1, x2, y2)))
 
     return frame, detections
 
