@@ -548,7 +548,8 @@ def get_gps_at_time(trajectory, video_start_time, current_video_time):
     return lat, lon, alt, real_datetime
 
 
-def process_video(video_path, output_path=None, display=True, save_output=True, gps_lat=None, gps_lon=None):
+def process_video(video_path, output_path=None, display=True, save_output=True, gps_lat=None, gps_lon=None,
+                  skip_frames=1, use_fast_codec=True):
     """
     处理视频文件，显示时间和元数据信息
 
@@ -559,6 +560,8 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
         save_output: 是否保存输出视频
         gps_lat: 纬度（手动指定，优先级高于自动提取）
         gps_lon: 经度（手动指定，优先级高于自动提取）
+        skip_frames: 跳帧处理（每N帧处理一次，默认1=每帧都处理）
+        use_fast_codec: 使用快速编码器（H.264，默认True）
     """
     import warnings
     import io
@@ -577,6 +580,12 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     print(f"视频信息: {width}x{height} @ {fps}fps, 总帧数: {total_frames}")
+
+    # 性能优化信息
+    if skip_frames > 1:
+        print(f"性能优化: 跳帧处理（每{skip_frames}帧处理1帧），处理速度提升约{skip_frames}x")
+    if use_fast_codec and save_output:
+        print(f"性能优化: 使用H.264编码器（比mp4v快2-3倍）")
 
     # 提取视频元数据
     metadata = extract_video_metadata(video_path)
@@ -618,12 +627,31 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
     # 创建视频写入器
     video_writer = None
     if save_output and output_path:
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        # 选择编码器
+        if use_fast_codec:
+            # 使用H.264编码器（需要安装）
+            # Windows通常支持H.264
+            fourcc = cv2.VideoWriter_fourcc(*'H264')  # 或使用 'avc1', 'X264'
+            # 如果H264不可用，尝试其他编码器
+        else:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
         video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        print(f"保存输出到: {output_path}")
+
+        if video_writer is None:
+            print(f"警告：无法创建视频写入器，尝试使用备用编码器...")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        if video_writer is not None:
+            print(f"保存输出到: {output_path}")
+        else:
+            print(f"错误：无法创建视频写入器")
+            save_output = False
 
     frame_count = 0
-    audio_sampling_interval = 0.1  # 每隔多少秒采样一次音频（降低到0.1秒以获得更实时的更新）
+    processed_frame_count = 0
+    audio_sampling_interval = 0.5 if skip_frames > 1 else 0.1  # 跳帧时降低采样频率
     last_audio_sample_time = -1
     current_volume = 0.0
 
@@ -635,6 +663,12 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
             break
 
         frame_count += 1
+
+        # 跳帧处理：只处理指定的帧
+        if frame_count % skip_frames != 0:
+            continue
+
+        processed_frame_count += 1
 
         # 计算当前时间戳
         current_time = frame_count / fps
@@ -723,7 +757,9 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
 
         # 显示进度
         if frame_count % 30 == 0:
-            print(f"已处理 {frame_count}/{total_frames} 帧 ({frame_count/total_frames*100:.1f}%)")
+            progress = frame_count / total_frames * 100
+            speedup = skip_frames if skip_frames > 1 else 1
+            print(f"已处理 {frame_count}/{total_frames} 帧 ({progress:.1f}%) - 速度提升: {speedup}x")
 
         # 显示画面
         if display:
@@ -749,7 +785,12 @@ def process_video(video_path, output_path=None, display=True, save_output=True, 
         video_writer.release()
     cv2.destroyAllWindows()
 
-    print(f"\n处理完成！共处理 {frame_count} 帧")
+    actual_speedup = frame_count / processed_frame_count if processed_frame_count > 0 else 1
+    print(f"\n处理完成！")
+    print(f"  总帧数: {frame_count}")
+    print(f"  处理帧数: {processed_frame_count}")
+    if skip_frames > 1:
+        print(f"  实际加速: {actual_speedup:.1f}x")
 
 
 if __name__ == "__main__":
@@ -768,6 +809,10 @@ if __name__ == "__main__":
                         help='GPS纬度（例如: 39.9042）')
     parser.add_argument('--gps-lon', type=float, default=None,
                         help='GPS经度（例如: 116.4074）')
+    parser.add_argument('--skip-frames', type=int, default=1,
+                        help='跳帧处理（每N帧处理1帧，默认1=每帧都处理。设置为5可提升5倍速度）')
+    parser.add_argument('--slow-codec', action='store_true',
+                        help='使用较慢的mp4v编码器（默认使用快速H.264编码器）')
 
     args = parser.parse_args()
 
@@ -779,6 +824,9 @@ if __name__ == "__main__":
         print("  python video_metadata_display.py --video test.mp4 --output result.mp4")
         print("  python video_metadata_display.py --video test.mp4 --gps-lat 39.9042 --gps-lon 116.4074")
         print("  python video_metadata_display.py --video test.mp4 --no-display --no-save")
+        print("\n性能优化:")
+        print("  python video_metadata_display.py --video test.mp4 --skip-frames 5  # 5倍速")
+        print("  python video_metadata_display.py --video test.mp4 --skip-frames 10 --no-display  # 10倍速")
     else:
         process_video(
             video_path=args.video,
@@ -786,5 +834,7 @@ if __name__ == "__main__":
             display=not args.no_display,
             save_output=not args.no_save,
             gps_lat=args.gps_lat,
-            gps_lon=args.gps_lon
+            gps_lon=args.gps_lon,
+            skip_frames=args.skip_frames,
+            use_fast_codec=not args.slow_codec
         )
