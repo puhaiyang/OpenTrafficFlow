@@ -363,37 +363,93 @@ class HornDetector:
 
 
 def main():
+    # 预设配置
+    PRESETS = {
+        'car': {
+            'name': '汽车喇叭',
+            'freq_min': 2000,
+            'freq_max': 5000,
+            'min_duration': 0.3,
+            'max_duration': 3.0,
+            'energy_threshold': 0.6,
+            'harmonic_threshold': 0.4,
+        },
+        'ebike': {
+            'name': '电动车/摩托车',
+            'freq_min': 3500,
+            'freq_max': 8000,
+            'min_duration': 0.1,
+            'max_duration': 2.0,
+            'energy_threshold': 0.35,
+            'harmonic_threshold': 0.2,
+        },
+        'sensitive': {
+            'name': '高灵敏度模式',
+            'freq_min': 1500,
+            'freq_max': 10000,
+            'min_duration': 0.1,
+            'max_duration': 5.0,
+            'energy_threshold': 0.25,
+            'harmonic_threshold': 0.15,
+        },
+    }
+
     parser = argparse.ArgumentParser(
         description='检测视频中的喇叭声并提取时间点',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 基本使用
+  # 基本使用（汽车喇叭）
   python detect_horn.py video.mp4
 
+  # 电动车鸣笛检测
+  python detect_horn.py video.mp4 --mode ebike
+
+  # 高灵敏度检测（可能误报）
+  python detect_horn.py video.mp4 --mode sensitive
+
   # 自定义参数
-  python detect_horn.py video.mp4 --freq-min 1500 --freq-max 6000 --threshold 0.7
+  python detect_horn.py video.mp4 --freq-min 1500 --freq-max 6000 --energy-threshold 0.5
 
   # 只检测不提取音频片段
   python detect_horn.py video.mp4 --no-extract
 
   # 指定输出目录
   python detect_horn.py video.mp4 --output-dir ./results
+
+预设模式:
+  car       - 汽车喇叭 (2-5kHz, 有明显谐波)
+  ebike     - 电动车/摩托车 (3.5-8kHz, 纯音)
+  sensitive - 高灵敏度，检测所有高频声音
         """
     )
 
     parser.add_argument('video', type=str, help='输入视频文件路径')
+    parser.add_argument('--mode', type=str, choices=['car', 'ebike', 'sensitive'], default='car',
+                        help='检测模式: car(汽车), ebike(电动车), sensitive(高灵敏度) (默认: car)')
     parser.add_argument('--output-dir', type=str, help='输出目录')
     parser.add_argument('--sample-rate', type=int, default=22050, help='音频采样率 (默认: 22050)')
-    parser.add_argument('--min-duration', type=float, default=0.3, help='最短鸣笛时长(秒) (默认: 0.3)')
-    parser.add_argument('--max-duration', type=float, default=3.0, help='最长鸣笛时长(秒) (默认: 3.0)')
-    parser.add_argument('--freq-min', type=float, default=2000, help='最小频率(Hz) (默认: 2000)')
-    parser.add_argument('--freq-max', type=float, default=5000, help='最大频率(Hz) (默认: 5000)')
-    parser.add_argument('--energy-threshold', type=float, default=0.6, help='能量阈值 0-1 (默认: 0.6)')
-    parser.add_argument('--harmonic-threshold', type=float, default=0.4, help='谐波阈值 0-1 (默认: 0.4)')
+    parser.add_argument('--min-duration', type=float, help='最短鸣笛时长(秒)')
+    parser.add_argument('--max-duration', type=float, help='最长鸣笛时长(秒)')
+    parser.add_argument('--freq-min', type=float, help='最小频率(Hz)')
+    parser.add_argument('--freq-max', type=float, help='最大频率(Hz)')
+    parser.add_argument('--energy-threshold', type=float, help='能量阈值 0-1')
+    parser.add_argument('--harmonic-threshold', type=float, help='谐波阈值 0-1')
     parser.add_argument('--no-extract', action='store_true', help='不提取音频片段')
 
     args = parser.parse_args()
+
+    # 应用预设配置
+    preset = PRESETS[args.mode]
+    freq_min = args.freq_min if args.freq_min is not None else preset['freq_min']
+    freq_max = args.freq_max if args.freq_max is not None else preset['freq_max']
+    min_duration = args.min_duration if args.min_duration is not None else preset['min_duration']
+    max_duration = args.max_duration if args.max_duration is not None else preset['max_duration']
+    energy_threshold = args.energy_threshold if args.energy_threshold is not None else preset['energy_threshold']
+    harmonic_threshold = args.harmonic_threshold if args.harmonic_threshold is not None else preset['harmonic_threshold']
+
+    print(f"使用预设模式: {preset['name']}")
+    print(f"参数: 频率 {freq_min}-{freq_max}Hz, 能量阈值 {energy_threshold}, 谐波阈值 {harmonic_threshold}")
 
     # 检查视频文件
     if not os.path.exists(args.video):
@@ -403,11 +459,11 @@ def main():
     # 创建检测器
     detector = HornDetector(
         sample_rate=args.sample_rate,
-        min_duration=args.min_duration,
-        max_duration=args.max_duration,
-        freq_range=(args.freq_min, args.freq_max),
-        energy_threshold=args.energy_threshold,
-        harmonic_threshold=args.harmonic_threshold,
+        min_duration=min_duration,
+        max_duration=max_duration,
+        freq_range=(freq_min, freq_max),
+        energy_threshold=energy_threshold,
+        harmonic_threshold=harmonic_threshold,
     )
 
     # 处理视频
