@@ -1,9 +1,15 @@
 # OpenTrafficFlow
 Make traffic faster and safer.
 
+文章地址：
+- [《小白都能看懂的——车牌检测与识别(最新版YOLO26快速入门)》](https://blog.csdn.net/puhaiyang/article/details/157846503)
 
 
+
+预览效果：
 ![traffic.gif](preview/traffic.gif)
+
+
 
 ## 数据集合格式
 ### CCPD-2019数据集
