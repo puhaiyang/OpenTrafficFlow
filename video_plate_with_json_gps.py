@@ -1,21 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-综合视频处理系统 - 车牌识别 + GPS + 音频 + 时间
-结合YOLO车牌检测、LPRNet车牌识别、GPS轨迹提取和音量监控
+综合视频处理系统 - 车牌识别 + GPS（从JSON）+ 时间
+
+与 video_plate_with_metadata.py 功能相同，但 GPS 数据从 JSON 文件读取
+适用于 trim_video.py 生成的视频和 GPS JSON 文件
 """
 import cv2
 import torch
 import numpy as np
 import os
 from datetime import datetime, timedelta
-from moviepy import VideoFileClip
 from PIL import Image, ImageDraw, ImageFont
 from ultralytics import YOLO
 import json
 import time
-import io
 import warnings
+import threading
+import queue
 
 # 导入LPRNet模型
 from model.LPRNet import build_lprnet
@@ -57,14 +59,19 @@ def load_models():
 yolo_model = None
 lpr_model = None
 
-# ==================== 工具函数 ====================
+# ==================== 字体加载（全局只加载一次）====================
 
-def cv2ImgAddText(img, text, pos, textColor=(255, 255, 255), textSize=30):
-    """在图像上添加中文文本"""
-    if isinstance(img, np.ndarray):
-        img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    draw = ImageDraw.Draw(img)
+_font_cache = {}  # 字体缓存: {textSize: font_object}
 
+def _get_font(textSize=30):
+    """获取字体对象（使用缓存，只加载一次）"""
+    global _font_cache
+
+    # 如果缓存中已有，直接返回
+    if textSize in _font_cache:
+        return _font_cache[textSize]
+
+    # 字体路径列表
     font_paths = [
         "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/simhei.ttf",
@@ -78,15 +85,37 @@ def cv2ImgAddText(img, text, pos, textColor=(255, 255, 255), textSize=30):
         if os.path.exists(font_path):
             try:
                 font = ImageFont.truetype(font_path, textSize, encoding="utf-8")
+                print(f"[INFO] 已加载字体: {font_path} (size={textSize})")
                 break
             except:
                 continue
 
     if font is None:
         font = ImageFont.load_default()
+        print(f"[WARNING] 使用默认字体")
+
+    # 缓存字体
+    _font_cache[textSize] = font
+    return font
+
+# ==================== 工具函数 ====================
+
+def cv2ImgAddText(img, text, pos, textColor=(255, 255, 255), textSize=30):
+    """在图像上添加中文文本"""
+    if isinstance(img, np.ndarray):
+        img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(img)
+
+    # 使用缓存的字体
+    font = _get_font(textSize)
 
     draw.text(pos, text, textColor, font=font)
     return cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
+
+
+def format_datetime(dt):
+    """将datetime对象格式化为字符串"""
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 
 def decode_res(preds, chars):
@@ -107,134 +136,61 @@ def decode_res(preds, chars):
     return "".join(res)
 
 
-def format_datetime(dt):
-    """将datetime对象格式化为字符串"""
-    return dt.strftime('%Y-%m-%d %H:%M:%S')
+# ==================== GPS从JSON读取 ====================
 
+def load_gps_from_json(json_path):
+    """
+    从JSON文件加载GPS数据
 
-# ==================== 音频监控 ====================
+    Args:
+        json_path: GPS JSON文件路径
 
-class AudioVolumeMonitor:
-    """音频音量监控器"""
-    def __init__(self, video_path):
-        self.video_path = video_path
-        self.audio_array = None
-        self.audio_fps = 44100
-        self.audio_duration = 0
-        self.total_samples = 0
-        self.has_audio = False
-        self._load_audio()
-
-    def _load_audio(self):
-        """加载音频数据到内存"""
-        try:
-            clip = VideoFileClip(self.video_path)
-            if clip.audio is None:
-                clip.close()
-                return
-            self.audio_array = clip.audio.to_soundarray(fps=self.audio_fps)
-            self.audio_duration = clip.audio.duration
-            self.total_samples = len(self.audio_array)
-            self.has_audio = True
-            clip.close()
-        except Exception as e:
-            print(f"加载音频数据时出错: {e}")
-            self.has_audio = False
-
-    def get_volume(self, start_time, duration=0.1):
-        """获取指定时间段的音量"""
-        if not self.has_audio or self.audio_array is None:
-            return 0.0
-        try:
-            end_time = min(start_time + duration, self.audio_duration)
-            if start_time >= self.audio_duration:
-                return 0.0
-            start_sample = int((start_time / self.audio_duration) * self.total_samples)
-            end_sample = int((end_time / self.audio_duration) * self.total_samples)
-            start_sample = max(0, min(start_sample, self.total_samples - 1))
-            end_sample = max(0, min(end_sample, self.total_samples))
-            audio_segment = self.audio_array[start_sample:end_sample]
-            if len(audio_segment) == 0:
-                return 0.0
-            if len(audio_segment.shape) > 1:
-                rms = np.sqrt(np.mean(audio_segment ** 2))
-            else:
-                rms = np.sqrt(np.mean(audio_segment ** 2))
-            volume = min(rms * 2, 1.0)
-            return volume
-        except Exception as e:
-            return 0.0
-
-
-# ==================== GPS轨迹提取 ====================
-
-def extract_gps_trajectory(video_path):
-    """提取GPS轨迹"""
-    trajectory = {
-        'timestamps': [],
-        'latitudes': [],
-        'longitudes': [],
-        'altitudes': [],
-        'has_gps': False
-    }
+    Returns:
+        gps_data: 包含GPS数据的字典，或None
+    """
+    if not os.path.exists(json_path):
+        print(f"[WARNING] GPS JSON 文件不存在: {json_path}")
+        return None
 
     try:
-        warnings.filterwarnings('ignore')
-        from pyosmogps import OsmoGps
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
-        old_stderr = sys.stderr
-        sys.stderr = io.StringIO()
-
-        try:
-            gps = OsmoGps([video_path], timezone_offset=8)
-            gps.extract()
-            lats = gps.get_latitude()
-            lons = gps.get_longitude()
-            alts = gps.get_altitude()
-
-            if len(lats) > 0:
-                trajectory['latitudes'] = lats
-                trajectory['longitudes'] = lons
-                trajectory['altitudes'] = alts if len(alts) > 0 else [0] * len(lats)
-                trajectory['has_gps'] = True
-
-                gps_fps = 50.0
-                for i in range(len(lats)):
-                    time_offset = i / gps_fps
-                    trajectory['timestamps'].append(time_offset)
-
-        finally:
-            sys.stderr = old_stderr
-
-    except ImportError:
-        pass
-    except Exception:
-        pass
-
-    return trajectory
+        print(f"[INFO] 成功加载 GPS JSON: {data.get('total_points', 0)} 个数据点")
+        return data
+    except Exception as e:
+        print(f"[ERROR] 读取 GPS JSON 失败: {e}")
+        return None
 
 
-def get_gps_at_time(trajectory, video_start_time, current_video_time):
-    """根据时间获取GPS坐标"""
-    if not trajectory['has_gps'] or len(trajectory['latitudes']) == 0:
-        return None, None, None, None
+def get_gps_at_time_from_json(gps_data, video_time):
+    """
+    从GPS JSON数据中获取指定时间的GPS坐标
 
-    gps_fps = 50.0
-    gps_index = int(current_video_time * gps_fps)
+    Args:
+        gps_data: GPS数据字典
+        video_time: 视频中的时间（秒）
 
-    if gps_index >= len(trajectory['latitudes']):
-        gps_index = len(trajectory['latitudes']) - 1
+    Returns:
+        lat, lon, alt: GPS坐标，如果没有则返回None
+    """
+    if gps_data is None:
+        return None, None, None
 
-    lat = trajectory['latitudes'][gps_index]
-    lon = trajectory['longitudes'][gps_index]
-    alt = trajectory['altitudes'][gps_index] if gps_index < len(trajectory['altitudes']) else 0
+    data_points = gps_data.get('data', [])
+    if not data_points:
+        return None, None, None
 
-    if video_start_time:
-        real_datetime = video_start_time + timedelta(seconds=current_video_time)
-    else:
-        real_datetime = None
+    gps_fps = gps_data.get('gps_fps', 50.0)
 
-    return lat, lon, alt, real_datetime
+    # 根据时间计算索引
+    index = int(video_time * gps_fps)
+
+    if index >= len(data_points):
+        index = len(data_points) - 1
+
+    point = data_points[index]
+    return point.get('latitude'), point.get('longitude'), point.get('altitude')
 
 
 # ==================== 车牌检测与识别 ====================
@@ -297,59 +253,7 @@ def detect_and_recognize_plates(frame, conf_threshold=0.5):
 
 def draw_info_panel(frame, current_datetime, current_lat, current_lon, current_alt,
                     detected_plates, panel_height=180):
-    """
-    在视频帧上绘制信息面板
-
-    Args:
-        frame: 输入图像帧
-        current_datetime: 当前时间
-        current_lat, current_lon, current_alt: GPS坐标
-        detected_plates: 检测到的车牌列表
-        panel_height: 信息面板高度
-    """
-    height, width = frame.shape[:2]
-
-    # 创建信息面板
-    panel = np.zeros((panel_height, width, 3), dtype=np.uint8)
-    panel[:] = (30, 30, 30)  # 深灰色背景
-
-    y_offset = 35
-    line_height = 35
-    x_pos = 20
-
-    # 绘制分割线
-    cv2.line(panel, (0, 0), (width, 0), (0, 200, 255), 3)
-
-    # 时间
-    if current_datetime:
-        time_str = format_datetime(current_datetime)
-        cv2.putText(panel, f"时间: {time_str}", (x_pos, y_offset),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-    y_offset += line_height
-
-    # GPS
-    if current_lat is not None and current_lon is not None:
-        gps_text = f"GPS: {current_lat:.6f}, {current_lon:.6f}"
-        cv2.putText(panel, gps_text, (x_pos, y_offset),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-        y_offset += line_height
-
-        alt_text = f"海拔: {current_alt:.1f}m"
-        cv2.putText(panel, alt_text, (x_pos, y_offset),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-    else:
-        cv2.putText(panel, "GPS: 无信号", (x_pos, y_offset),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (128, 128, 128), 2)
-    y_offset += line_height
-
-    # 车牌信息
-    if detected_plates:
-        cv2.putText(panel, f"检测到车牌: {len(detected_plates)}", (x_pos, y_offset),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-
-    # 叠加面板到帧（放在底部）
-    frame[-panel_height:, :] = panel
-
+    """在视频帧上绘制信息面板（已弃用，保留用于兼容）"""
     return frame
 
 
@@ -370,7 +274,7 @@ def draw_plate_boxes(frame, detections, current_datetime=None, current_lat=None,
         text_x = x1 - 100
         if text_x < 0:
             text_x = 10
-        text_y_start = y1 - 250  # 从更高位置开始绘制
+        text_y_start = y1 - 250
         if text_y_start < 0:
             text_y_start = 10
 
@@ -402,18 +306,18 @@ def draw_plate_boxes(frame, detections, current_datetime=None, current_lat=None,
 
 # ==================== 主处理函数 ====================
 
-def process_video(video_path, output_path=None, display=True,
-                 save_output=False, conf_threshold=0.5, skip_frames=1):
+def process_video(video_path, gps_data, output_path=None, display=True,
+                 save_output=False, conf_threshold=0.5):
     """
-    处理视频文件，进行车牌检测、GPS轨迹、音量监控和时间显示
+    处理视频文件，进行车牌检测、GPS（从JSON）和时间显示
 
     Args:
         video_path: 输入视频路径
+        gps_data: GPS数据字典（已加载）
         output_path: 输出视频路径（可选）
         display: 是否显示实时画面
         save_output: 是否保存输出视频
         conf_threshold: 检测置信度阈值
-        skip_frames: 跳帧处理（每N帧处理1帧）
     """
     global yolo_model, lpr_model
 
@@ -422,8 +326,16 @@ def process_video(video_path, output_path=None, display=True,
         yolo_model, lpr_model = load_models()
 
     print(f"\n{'='*70}")
-    print("综合视频处理系统 - 车牌识别 + GPS + 音频 + 时间")
+    print("综合视频处理系统 - 车牌识别 + GPS(从JSON) + 时间")
     print(f"{'='*70}\n")
+
+    # 检查GPS数据
+    if gps_data is None:
+        print("[WARNING] GPS数据为空，将不显示GPS信息")
+    elif gps_data.get('data'):
+        print(f"[INFO] GPS数据已加载: {gps_data.get('total_points', 0)} 个数据点")
+    else:
+        print("[WARNING] GPS数据无效")
 
     # 打开视频
     cap = cv2.VideoCapture(video_path)
@@ -438,22 +350,6 @@ def process_video(video_path, output_path=None, display=True,
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     print(f"视频信息: {width}x{height} @ {fps}fps, 总帧数: {total_frames}")
-
-    # 加载音频数据
-    print("正在加载音频数据...")
-    audio_monitor = AudioVolumeMonitor(video_path)
-    if audio_monitor.has_audio:
-        print(f"音频数据加载成功，时长: {audio_monitor.audio_duration:.2f}秒")
-    else:
-        print("无音频轨道")
-
-    # 提取GPS轨迹
-    print("正在提取GPS轨迹...")
-    gps_trajectory = extract_gps_trajectory(video_path)
-    if gps_trajectory['has_gps']:
-        print(f"成功提取 {len(gps_trajectory['latitudes'])} 个GPS数据点")
-    else:
-        print("未检测到GPS信息")
 
     # 获取视频开始时间
     video_start_time = None
@@ -471,8 +367,37 @@ def process_video(video_path, output_path=None, display=True,
         video_writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
         print(f"输出视频: {output_path}")
 
+    # ==================== 异步推理队列 ====================
+    frame_queue = queue.Queue(maxsize=5)
+    latest_detections = []
+    lock = threading.Lock()
+    stop_flag = False
+
+    def ai_worker():
+        """后台AI推理线程"""
+        nonlocal latest_detections, stop_flag
+
+        while not stop_flag:
+            try:
+                item = frame_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            frame_id, frame = item
+            detections = detect_and_recognize_plates(frame, conf_threshold)
+
+            if detections:
+                with lock:
+                    latest_detections = detections
+
+            frame_queue.task_done()
+
+    # 启动AI线程
+    t = threading.Thread(target=ai_worker, daemon=True)
+    t.start()
+    # =====================================================
+
     frame_count = 0
-    processed_count = 0
     all_detections = []
 
     start_time = time.time()
@@ -485,63 +410,53 @@ def process_video(video_path, output_path=None, display=True,
             break
 
         frame_count += 1
-
-        # 跳帧处理
-        if frame_count % skip_frames != 0:
-            # 如果需要写入视频，仍然写入原帧
-            if video_writer:
-                video_writer.write(frame)
-            continue
-
-        processed_count += 1
-
-        # 计算当前时间
         current_time = frame_count / fps
 
-        # 获取GPS坐标
-        current_lat, current_lon, current_alt, current_datetime = get_gps_at_time(
-            gps_trajectory, video_start_time, current_time
-        )
+        # GPS & 时间
+        lat, lon, alt = get_gps_at_time_from_json(gps_data, current_time)[:3]
+        current_datetime = video_start_time + timedelta(seconds=current_time) if video_start_time else None
 
-        # 车牌检测与识别
-        detections = detect_and_recognize_plates(frame, conf_threshold)
+        # ================= 把帧丢给AI线程（不等待） =================
+        if not frame_queue.full():
+            frame_queue.put((frame_count, frame.copy()))
+        # ============================================================
 
-        # 保存检测结果
-        for plate_no, conf, bbox in detections:
-            all_detections.append({
-                'frame': frame_count,
-                'plate': plate_no,
-                'confidence': conf,
-                'bbox': bbox,
-                'time': current_time
-            })
+        # 取最近一次检测结果（绝不等待）
+        with lock:
+            detections = latest_detections.copy()
 
-        # 绘制车牌检测框（包含时间和GPS信息）
-        frame = draw_plate_boxes(frame, detections, current_datetime, current_lat, current_lon, current_alt)
+        # 保存检测结果（用于统计）
+        if detections:
+            for plate_no, conf, bbox in detections:
+                all_detections.append({
+                    'frame': frame_count,
+                    'plate': plate_no,
+                    'confidence': conf,
+                    'bbox': bbox,
+                    'time': current_time
+                })
 
-        # 不再绘制底部信息面板
+        # 画框
+        frame = draw_plate_boxes(frame, detections, current_datetime, lat, lon, alt)
 
-        # 写入输出视频
+        # 写视频（恒速）
         if video_writer:
             video_writer.write(frame)
 
         # 显示进度
-        if processed_count % 30 == 0:
+        if frame_count % 30 == 0:
             elapsed = time.time() - start_time
-            fps_actual = processed_count / elapsed if elapsed > 0 else 0
+            fps_actual = frame_count / elapsed if elapsed > 0 else 0
             print(f"已处理 {frame_count}/{total_frames} 帧 ({frame_count/total_frames*100:.1f}%) - "
                   f"速度: {fps_actual:.1f} fps")
 
         # 显示画面
         if display:
-            # 添加帧数信息（左上角）
-            info_text = f"Frame: {frame_count}/{total_frames} | Detected: {len(detections)}"
+            info_text = f"Frame: {frame_count}/{total_frames} | Plates: {len(detections)}"
             cv2.putText(frame, info_text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
             cv2.imshow("综合视频处理系统", frame)
 
-            # 按 'q' 退出，按 ' ' 暂停
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 print("\n处理被用户终止")
@@ -549,6 +464,10 @@ def process_video(video_path, output_path=None, display=True,
             elif key == ord(' '):
                 print("已暂停 - 按任意键继续...")
                 cv2.waitKey(0)
+
+    # 停止AI线程
+    stop_flag = True
+    t.join(timeout=1)
 
     # 释放资源
     cap.release()
@@ -562,9 +481,8 @@ def process_video(video_path, output_path=None, display=True,
     print("处理完成!")
     print(f"{'='*70}")
     print(f"总帧数: {total_frames}")
-    print(f"处理帧数: {processed_count}")
     print(f"耗时: {elapsed_time:.1f}秒")
-    print(f"平均速度: {processed_count/elapsed_time:.1f} fps")
+    print(f"平均速度: {frame_count/elapsed_time:.1f} fps")
     print(f"总检测数: {len(all_detections)}")
 
     # 输出检测统计
@@ -587,35 +505,79 @@ def process_video(video_path, output_path=None, display=True,
 if __name__ == "__main__":
     import sys
     import argparse
+    from pathlib import Path
 
-    parser = argparse.ArgumentParser(description='综合视频处理系统 - 车牌识别 + GPS + 音频 + 时间')
+    parser = argparse.ArgumentParser(
+        description='综合视频处理系统 - 车牌识别 + GPS(从JSON) + 时间',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+
+  # 基本用法 - 使用GPS JSON文件
+  python video_plate_with_json_gps.py --video clip.mov --gps clip.gps.json
+
+  # 保存输出视频
+  python video_plate_with_json_gps.py --video clip.mov --gps clip.gps.json --output result.mp4
+
+  # 不显示画面
+  python video_plate_with_json_gps.py --video clip.mov --gps clip.gps.json --no-display
+
+注意事项:
+  - GPS数据从JSON文件读取，而不是从视频元数据
+  - JSON文件由trim_video.py生成
+  - GPS数据包含time_offset（剪辑内的相对时间）
+        """
+    )
+
     parser.add_argument('--video', type=str, required=True,
-                        help='输入视频路径')
-    parser.add_argument('--output', type=str, default=None,
+                        help='输入视频路径（MOV格式）')
+    parser.add_argument('--gps', type=str, default=None,
+                        help='GPS JSON文件路径（可选，默认自动匹配）')
+    parser.add_argument('--output', '-o', type=str, default=None,
                         help='输出视频路径（可选）')
     parser.add_argument('--no-display', action='store_true',
                         help='不显示实时画面')
     parser.add_argument('--conf', type=float, default=0.5,
                         help='检测置信度阈值（默认: 0.5）')
-    parser.add_argument('--skip-frames', type=int, default=1,
-                        help='跳帧处理，每N帧处理1帧（默认: 1，不跳帧）')
 
     args = parser.parse_args()
 
-    # 检查输入视频是否存在
+    # 检查输入文件
     if not os.path.exists(args.video):
-        print(f"错误：找不到视频文件 '{args.video}'")
-        print("\n使用示例:")
-        print("  python video_plate_with_metadata.py --video test.mp4")
-        print("  python video_plate_with_metadata.py --video test.mp4 --output result.mp4")
-        print("  python video_plate_with_metadata.py --video test.mp4 --no-display --conf 0.6")
-        print("  python video_plate_with_metadata.py --video test.mp4 --skip-frames 5  # 跳帧加速")
+        print(f"[ERROR] 找不到视频文件 '{args.video}'")
+        sys.exit(1)
+
+    # 确定 GPS JSON 文件路径
+    gps_json_path = args.gps
+    if gps_json_path is None:
+        # 自动查找与视频同名的 .gps.json 文件
+        video_path = Path(args.video)
+        gps_json_path = str(video_path.with_suffix('.gps.json'))
+        print(f"[INFO] 自动查找 GPS JSON: {os.path.basename(gps_json_path)}")
     else:
-        process_video(
-            video_path=args.video,
-            output_path=args.output,
-            display=not args.no_display,
-            save_output=bool(args.output),
-            conf_threshold=args.conf,
-            skip_frames=args.skip_frames
-        )
+        print(f"[INFO] 使用指定的 GPS JSON: {gps_json_path}")
+
+    # 检查 GPS JSON 文件
+    if not os.path.exists(gps_json_path):
+        print(f"[WARNING] 找不到 GPS JSON 文件 '{gps_json_path}'")
+        print("[WARNING] 将不显示 GPS 信息")
+        gps_data = None
+    else:
+        print(f"[INFO] 找到 GPS JSON 文件")
+        gps_data = load_gps_from_json(gps_json_path)
+
+    # 自动生成输出文件名
+    if args.output is None:
+        video_path = Path(args.video)
+        output_name = f"{video_path.stem}_processed{video_path.suffix}"
+        args.output = str(video_path.parent / output_name)
+
+    # 执行处理（使用已加载的 gps_data）
+    process_video(
+        video_path=args.video,
+        gps_data=gps_data,
+        output_path=args.output,
+        display=not args.no_display,
+        save_output=True,
+        conf_threshold=args.conf
+    )
