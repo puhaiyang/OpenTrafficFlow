@@ -60,3 +60,9 @@ pip install pillow
 
 # 车牌提取
 https://github.com/sirius-ai/LPRNet_Pytorch
+
+
+# 上传违章举报
+https://github.com/zai-org/Open-AutoGLM
+
+> ./run.bat --base-url https://open.bigmodel.cn/api/paas/v4 --model "autoglm-phone" --apikey "YOUR_KEY" --device-id "ip:port" "打开微信，找到成都交警公众号，进去之后点蓉e行，进入蓉e行中，点击交通违法举报，点击侵走非机动车道，选择视频导入模式"
