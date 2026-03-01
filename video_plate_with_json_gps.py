@@ -294,7 +294,7 @@ def detect_and_recognize_plates(frame, conf_threshold=0.5):
     return detections
 
 
-def draw_plate_boxes(frame, detections, current_datetime, lat, lon, alt):
+def draw_plate_boxes(frame, detections, current_datetime, lat, lon, alt, violation_type="侵走非机动车道"):
     for plate_no, conf, bbox in detections:
         x1, y1, x2, y2 = bbox
         text_x = max(10, x1 - 100)
@@ -310,14 +310,14 @@ def draw_plate_boxes(frame, detections, current_datetime, lat, lon, alt):
             current_y += 50
 
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 3)
-        frame = paste_text(frame, plate_no + " 侵走非机动车道", text_x, current_y, 60, (255, 0, 0))
+        frame = paste_text(frame, plate_no + " " + violation_type, text_x, current_y, 60, (255, 0, 0))
     return frame
 
 
 # ==================== 主处理函数 (修复版) ====================
 
 def process_video(video_path, gps_data, output_path=None, display=True,
-                  save_output=False, conf_threshold=0.5):
+                  save_output=False, conf_threshold=0.5, violation_type="侵走非机动车道"):
     global yolo_model, lpr_model
     if yolo_model is None: yolo_model, lpr_model = load_models()
 
@@ -461,7 +461,7 @@ def process_video(video_path, gps_data, output_path=None, display=True,
         dt = video_start_time + timedelta(seconds=current_time) if video_start_time else None
 
         detections = detect_and_recognize_plates(frame, conf_threshold)
-        frame = draw_plate_boxes(frame, detections, dt, lat, lon, alt)
+        frame = draw_plate_boxes(frame, detections, dt, lat, lon, alt, violation_type)
 
         if video_writer:
             # 阻塞写入，传递frame对象（无需copy，节省15ms）
@@ -520,12 +520,14 @@ if __name__ == "__main__":
     args = sys.argv
     video_file = "F:\\video\\自动违章举报\\test_clip.mp4"  # 默认值，方便调试
     gps_file = "F:\\video\\自动违章举报\\test_clip.gps.json"
+    violation_type = "侵走非机动车道"  # 默认值
 
     # 简单的命令行解析
     if len(args) > 1:
         for i, arg in enumerate(args):
             if arg == "--video" and i + 1 < len(args): video_file = args[i + 1]
             if arg == "--gps" and i + 1 < len(args): gps_file = args[i + 1]
+            if arg == "--violation" and i + 1 < len(args): violation_type = args[i + 1]
 
     if not os.path.exists(gps_file):
         # 尝试自动寻找
@@ -536,4 +538,4 @@ if __name__ == "__main__":
 
     # 完全禁用显示，避免 cv2.waitKey 阻塞主线程
     # 如果需要预览，请在导出后单独播放视频
-    process_video(video_file, gps_data, output_file, display=False, save_output=True)
+    process_video(video_file, gps_data, output_file, display=False, save_output=True, violation_type=violation_type)

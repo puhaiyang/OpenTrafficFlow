@@ -71,6 +71,15 @@ python video_metadata_display.py --video F:\video\自动违章举报\DJI_2025122
 
 # 多进程模式（最快，适合大批量处理）
 python video_multiprocess.py --video F:\video\自动违章举报\DJI_20251223081916_0084_D.mp4 --output multiprocess_output.mp4 --skip-frames 5
+
+python video_plate_with_metadata.py --video F:\video\自动违章举报\DJI_20251223081916_0084_D.mp4 --output result1.mp4
+
+python video_plate_with_metadata.py --video F:\video\自动违章举报\test_clip.mp4 --output result1.mp4
+
+python trim_video.py --input F:\video\自动违章举报\DJI_20251223081916_0084_D.mp4 --output F:\video\自动违章举报\test_clip.mp4 --start 150 --duration 10
+
+python video_plate_with_json_gps.py --video F:\video\自动违章举报\test_clip.mp4 --output F:\video\自动违章举报\result.mp4
+
 ```
 
 ### 性能优化建议
