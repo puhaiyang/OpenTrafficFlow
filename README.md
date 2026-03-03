@@ -69,6 +69,15 @@ https://github.com/zai-org/Open-AutoGLM
 
 ---
 
+# 了解详细
+
+获取自动违章举报软件的最新信息，欢迎扫码入群：
+
+![wx_group.png](preview/wx_group.png)
+
+
+---
+
 ## 各地交通违法举报平台汇总
 
 以下是全国各地交通违法举报平台的信息汇总：
