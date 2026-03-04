@@ -61,6 +61,152 @@ pip install pillow
 # 车牌提取
 https://github.com/sirius-ai/LPRNet_Pytorch
 
+---
+
+## Android 部署 - 模型转换为 NCNN 格式
+
+本项目支持将训练好的模型转换为 NCNN 格式，用于在 Android 设备上部署。
+
+### 模型文件说明
+
+- **YOLO 检测模型**: `weights/best.pt` - 用于车牌检测
+- **LPRNet 识别模型**: `weights/Final_LPRNet_model.pth` - 用于车牌字符识别
+
+---
+
+### 一、YOLO 模型转换 (best.pt → NCNN)
+
+使用 Ultralytics 内置的导出功能，一键转换 YOLO 模型到 NCNN 格式。
+
+#### 转换步骤
+
+**1. 安装 Ultralytics**
+
+```bash
+pip install ultralytics
+```
+
+**2. 运行转换代码**
+
+```python
+from ultralytics import YOLO
+
+# 加载 YOLO 模型
+model = YOLO('weights/best.pt')
+
+# 导出为 NCNN 格式
+model.export(format='ncnn')
+```
+
+**3. 获取转换结果**
+
+转换完成后，会生成以下文件：
+- `best.pt.ncnn.param` - NCNN 参数文件（约 26 KB）
+- `best.pt.ncnn.bin` - NCNN 权重文件（约 9.2 MB）
+
+#### 常用导出参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `format` | 导出格式，设置为 `'ncnn'` | - |
+| `imgsz` | 输入图像尺寸 | 原始训练尺寸 |
+| `half` | 是否使用 FP16 精度 | `False` |
+| `simplify` | 是否简化 ONNX 模型 | `True` |
+
+#### 注意事项
+
+- YOLO 模型会先转换为 ONNX 格式，然后再转换为 NCNN 格式
+- 确保已安装 `onnx` 和 `onnx-simplifier` 依赖
+- 转换后的 NCNN 模型可以在 Android 上使用 NCNN 框架加载
+
+---
+
+### 二、LPRNet 模型转换 (Final_LPRNet_model.pth → NCNN)
+
+LPRNet 模型需要先转换为 ONNX 格式，然后使用在线工具转换为 NCNN。
+
+#### 步骤 1：PyTorch → ONNX
+
+使用项目提供的转换脚本：
+
+```bash
+python convert_simple.py
+```
+
+该脚本会：
+- 加载 `weights/Final_LPRNet_model.pth`
+- 设置正确的类别数 (class_num=68)
+- 导出为 `weights_ncnn/lprnet.onnx`
+
+**输入维度**: `[1, 3, 24, 94]` - (batch, channels, height, width)
+
+#### 步骤 2：ONNX → NCNN (在线转换)
+
+使用 **ConvertModel** 在线工具进行转换：
+
+**1. 访问转换网站**
+
+```
+https://convertmodel-1256200149.cos-website.ap-nanjing.myqcloud.com/
+```
+
+**2. 选择转换格式**
+- 输入格式: **ONNX**
+- 输出格式: **NCNN**
+
+**3. 上传并转换**
+- 上传: `lprnet.onnx` (约 1.71 MB)
+- 点击转换按钮
+
+**4. 下载结果**
+- 下载生成的 `.param` 和 `.bin` 文件
+- 重命名为 `lprnet.param` 和 `lprnet.bin`
+
+#### 其他在线转换工具
+
+| 工具名称 | 地址 | 特点 |
+|---------|------|------|
+| **PNNX 在线工具** | https://pnnx.pchar.cn/ | 本地运行，不上传模型，数据隐私安全 |
+| **ToolForge** | https://toolforge.homes/tools/svc-ncnn-v1 | ONNX → NCNN 专用转换器 |
+
+---
+
+### 三、Android 集成
+
+转换完成后，将生成的 NCNN 文件复制到 Android 项目的 `assets` 目录：
+
+```
+Android项目/app/src/main/assets/
+├── yolo_plate.param      # YOLO 检测模型
+├── yolo_plate.bin        # YOLO 权重
+├── lprnet.param          # LPRNet 识别模型
+└── lprnet.bin            # LPRNet 权重
+```
+
+#### NCNN Android 库
+
+- **下载地址**: https://github.com/Tencent/ncnn/releases
+- **选择版本**: `ncnn-android-vulkan.zip` (支持 GPU 加速)
+- **集成方式**: 将 `.so` 文件放入 `app/src/main/jniLibs/` 对应架构目录
+
+#### 支持的 CPU 架构
+
+```
+jniLibs/
+├── arm64-v8a/
+│   └── libncnn.so
+└── armeabi-v7a/
+    └── libncnn.so
+```
+
+---
+
+### 四、参考资源
+
+- [Ultralytics 文档 - 导出模型](https://docs.ultralytics.com/modes/export/)
+- [NCNN GitHub](https://github.com/Tencent/ncnn)
+- [NCNN 使用指南](https://github.com/Tencent/ncnn/wiki/use-ncnn-with-pytorch-or-onnx)
+
 
 # 上传违章举报
 https://github.com/zai-org/Open-AutoGLM
