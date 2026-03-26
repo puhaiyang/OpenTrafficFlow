@@ -1,0 +1,26 @@
+{
+  "skill_name": "traffic-violation-reporter",
+  "evals": [
+    {
+      "id": 1,
+      "name": "basic_violation_report",
+      "prompt": "我有一个交通违法视频，位于examples/video1.json，需要通过成都交警微信公众号举报这起违法事件，车牌号是川AA91637",
+      "expected_output": "Successfully generates AutoGLM task with correct violation data from JSON and executes the complete reporting workflow including mitmproxy GPS mocking",
+      "files": ["examples/video1.json"]
+    },
+    {
+      "id": 2,
+      "name": "custom_location_report",
+      "prompt": "用examples/video1.json的数据举报交通违法，但是地点描述改为'人民南路一段和天府广场'",
+      "expected_output": "Successfully processes violation data from JSON and uses custom location '人民南路一段和天府广场' in the violation description",
+      "files": ["examples/video1.json"]
+    },
+    {
+      "id": 3,
+      "name": "check_prerequisites",
+      "prompt": "我想举报交通违法，但不知道系统是否配置好了，请帮我检查 prerequisites",
+      "expected_output": "Checks and reports status of: ADB connection, mitmproxy installation, Open-AutoGLM availability, JSON file existence, and helper scripts",
+      "files": []
+    }
+  ]
+}
