@@ -378,7 +378,17 @@ def process_files(
             bbox = extract_bbox_from_filename(filename, dataset_type)
 
             if bbox is None:
-                failed += 1
+                #处理ccpd_np中的没有车牌的数据
+                img_target_path=os.path.join(target_path,'images',split_name,filename)
+                if copy_images:
+                    shutil.copy2(img_path,img_target_path)
+                else:
+                    shutil.move(img_path,img_target_path)
+                label_filename=os.path.splitext(filename)[0]+'.txt'
+                label_target_path=os.path.join(target_path, 'labels', split_name, label_filename)
+                with open(label_target_path,'w') as f:
+                    f.write('')
+                    success+=1
                 continue
 
             # 转换为 YOLO 格式
